@@ -461,7 +461,21 @@ public abstract class Pizza {
 
 ```  
 
-`Pizza.Builder 클래스`는 [재귀적 타입 한정](##-아이템30.-이왕이면-제네릭-메서드로-만들라)을 이용하는 제네릭 타입이다.
+`Pizza.Builder 클래스`는 [재귀적 타입 한정(recursive type bound)](##-아이템30.-이왕이면-제네릭-메서드로-만들라)을 이용하는 제네릭 타입이다.
+
+abstract static class Builder `<T extends Builder<T>>`  
+-> 자기 자신이 들어간 표현식을 사용하여 타입 매개변수의 허용범위를 한정한다.  
+-> <T>는 Any?의 줄임말 = Any?>타입을 상속받은 것들이라면 다된다는 의미.(upper Bounded 되었다고함.)  
+-> T는 Builder<T>의 제한을 받는 타입이여야한다.  
+`즉! T는 Builder를 상속받은 타입이여야한다는것!`
+
+``` java
+public static class Builder extends Pizza.Builder<Builder> { ... }
+// 뉴욕피자의 빌더는 피자 클래스의 Builder 클래스를 상속받았기때문에 Builder의 타입으로 들어갈수있다.  
+```
+https://medium.com/@joongwon/java-java%EC%9D%98-generics-604b562530b3
+
+
 
 여기에 `추상메서드인 self()`를 더해 하위클래스에서는 형변환하지 않고도 메서드 연쇄를 지원할수있다.  
 -> self 타입이 없는 자바를 위한 우회 방법 `시뮬레이트한 셀프타입 관용구(simulated self-type)`
