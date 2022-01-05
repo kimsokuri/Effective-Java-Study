@@ -13,8 +13,9 @@ Effective Java 3/E - 조슈아 블로크
 
 ## **목차**
 ### *2장 객체생성과 파괴*
-[아이템1. 생성자대신 정적 팩터리 메서드를 고려하라](##-아이템1.-생성자대신-정적-팩터리-메서드를-고려하라)
+[아이템1. 생성자대신 정적 팩터리 메서드를 고려하라](##-아이템1.-생성자대신-정적-팩터리-메서드를-고려하라)  
 
+[아이템2. 생성자에 매개변수가 많다면 빌더를 고려하라](##-아이템2.-생성자에-매개변수가-많다면-빌더를-고려하라)
 
 
 ---
@@ -62,6 +63,17 @@ public static Boolean valueOf(boolean b){
 
 3. **반환 타입의 하위 타입 객체를 반환할 수 있는 능력이 있다.**  
    반환될 객체의 클래스를 자유롭게 선택할수있게하는 엄청난 유연성!!
+   ``` java
+   class Earth {
+       public static Animal getAnimal(boolean isStudy){
+           return isStudy ? new Person() : new Pig();
+       }
+   }
+   
+   class Animal {}
+   class Person extends Animal {}
+   class Pig extends Animal {}
+   ```
    * API 생성시 구현 클래스를 공개하지않고도 그 객체를 반환할 수 있어 API 작게 유지가능  
      * [인터페이스 기반 프레임워크](##-아이템20.-추상-클래스보다는-인터페이스를-우선하라): 정적 팩터리 메서드의 반환 타입이 `인터페이스`
      * `자바 8 이전` : 인터페이스에 정적 메서드 선언 불가  
@@ -99,6 +111,31 @@ public static Boolean valueOf(boolean b){
       * 원소가 64개 이하 : *RegularEnumSet* 인스턴스 (`long 변수`로 관리)
       * 원소가 65개 이상 : *JumboEnumSet* 인스턴스 (`long 배열`로 관리)   
 5. **정적 팩터리 메서드를 작성하는 시점에는 반환할 객체의 클래스가 존재하지 않아도 된다.**  
+   ``` java
+   public class MyBook{
+    public static List<MyBookInterface> getInstance(){
+        return new ArrayList<>();
+    }
+   }
+
+   public interface MyBookInterface {
+       // 아직 구현 되지 않은 구현체
+   }
+
+   public class MyBookImpl implements MyBookInterface{
+       // 추후 MyBookInterface 를 상속받는 구현 클래스 생성
+   }
+
+   public class test {
+       public static void main(String [] args ){
+        List<MyBookInterface> bookImpls = MyBook.getInstance();
+
+        // 추후 구현된 클래스를 생성후 bookImpls에 추가
+        MyBookInterface bookImpl = new MyBookImpl();
+        bookImpls.add(bookImpl);
+       }
+   }
+   ```
    이런 유연함으로 `서비스 제공자 프레임워크(service provider framework)`를 만드는 근간이 된다.  
    서비스 제공자 프레임워크에서의 `제공자(provider)`는 **서비스의 구현체**다.  
    구현체들을 클라이언트에 제공하는 역할을 프레임워크가 통제  
@@ -124,7 +161,7 @@ public static Boolean valueOf(boolean b){
      
 ### **단점**  
 1. **상속을 하려면 public이나 protected 생성자가 필요하니 정적 팩터리 메서드만 제공하면 하위 클래스를 만들 수 없다.**  
-위에서 말한 [컬렉션 프레임워크의 유틸리티 구현 클래스](*-`java.util.Collections-인스턴스화-불가-클래스`)들은 상속할 수 없다.   
+위에서 말한 [컬렉션 프레임워크의 유틸리티 구현 클래스](*-`java.util.Collections-인스턴스화-불가-클래스`)들은 `private 생성자만 있어서` 상속할 수 없다.   
 아래 기능을 구현하기 위해서는 제약을 지켜야지만 가능 (오히려 위 제약이 장점;)  
    1. 상속보다 [컴포지션](##-아이템18.-상속보다는-컴포지션을-사용하라)을 사용하도록 유도
    2. [불변타입](##-아이템17.-변경-가능성을-최소화하라)으로 만들기     
@@ -184,3 +221,399 @@ List<Complaint> litany = Collections."list"(legacyLitany);
 정적 팩터리 메서드와 public 생성자는 각자의 쓰임새가 있으니 
 상대적인 장단점을 이해하고 사용하는 것이 좋다!
 하지만 정적 팩터리 메서드를 사용하는게 유리한 경우가 많으니까 무작정 생성자 쓰지는 말자!
+```
+
+---
+
+## **아이템2. 생성자에 매개변수가 많다면 빌더를 고려하라**
+ 정적 팩터리 메서드와 생성자의 제약 : `선택적 매개변수가 많을 때 적절히 대응하기는 어렵다는 것`
+ > 식품 포장의 영양정보 클래스
+
+ 영양정보는 보통 20개가 넘는 선택항목으로 이루어진다.  
+ 하지만 대부분의 제품은 선택 항목의 대다수 값이 거의 0이다.
+
+### `1.점층적 생성자 패턴(telescoping constructor pattern)`   
+필수 매개변수만 받는 생성자, 필수 매개변수와 선택 매개변수 1개를 받는 생성자 .. 등등  
+매개변수를 점점 늘려 생성자를 만드는 방식이다.
+``` java
+public class NutritionFacts {
+    private final int servingSize;  // ml   / 필수
+    private final int servings;     // 회   / 필수
+    private final int calories;     // 칼로리 / 선택
+    private final int fat;          // g    / 선택
+    private final int sodium;       // mg   / 선택
+    private final int carbohydrate; // g    / 선택
+
+    public NutritionFacts(int servingSize, int servings){
+        this(servingSize, servings, 0); // 아래 생성자 호출
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories){
+        this(servingSize, servings, calories, 0); // 아래 생성자 호출
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat){
+        this(servingSize, servings, calories, fat, 0); // 아래 생성자 호출
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat, int sodium){
+        this(servingSize, servings, calories, fat, sodium, 0); // 아래 생성자 호출
+    }
+
+    public NutritionFacts(int servingSize, int servings, int calories, int fat, int sodium, int carbohydrate){
+        this.servingSize = servingSize;
+        this.servings = servings;
+        this.calories = calories;
+        this.fat = fat;
+        this.sodium = sodium;
+        this.carbohydrate = carbohydrate;
+    }
+
+}
+
+```
+
+이 클래스의 인스턴스를 만드려면 원하는 매개변수를 모두 포함한 생성자 중 가장 짧은것을 골라 호출하면 된다.
+``` java
+NutritionFacts cocaCola = new NutritionFacts(240, 8, 100, 0, 35, 27);
+```
+보통 이런 생성자는 사용자가 설정하길 원치않는 매개변수까지 포함하기 쉬운데, 어쩔수없기 그런 매개변수에도 값을 지정해야한다. 위 코드에서는 지방(fat)에 0을 넘겼다.  
+**점층적 생성자 패턴은 매개변수 개수가 많아지면 클라이언트 코드를 작성하거나 읽기 어려워진다**  
+
+클라이언트가 실수로 매개변수의 순서를 바꿔 건네줘도 컴파일러는 알아채지 못하고  
+결국 [런타임에 엉뚱한 동작](##-아이템51.-메서드-시그니처를-신중히-설계하라)을 할수있다! 
+
+
+### `2.자바 빈즈 패턴(JavaBeans pattern)`  
+매개변수가 없는 생성자로 객체를 만든 후,   
+세터(setter) 메서드들을 호출해 원하는 매개변수의 값을 설정하는 방식   
+
+``` java
+public class NutritionFacts {
+    // 매개변수들은 (기본값이 있다면) 기본값으로 초기화된다.
+    private int servingSize = -1;   //필수 / 기본값 없음
+    private int servings = -1;      //필수 / 기본값 없음
+    private int calories = 0;
+    private int fat = 0;
+    private int sodium = 0;
+    private int carbohydrate = 0;
+
+    public NutritionFacts(){}
+
+    //세터 메서드
+    public void setServingSize(int val){ servingSize = val; }
+    public void setServings(int val){ servings = val; }
+    public void setCalories(int val){ calories = val; }
+    public void setFat(int val){ fat = val; }
+    public void setSodium(int val){ sodium = val; }
+    public void setCarbohydrate(int val){ carbohydrate = val; }
+}
+
+-------------------------------------------
+
+NutritionFacts cocacola = new NutritionFacts();
+cocaCola.setServingSize(240);
+cocaCola.setServings(8);
+cocaCola.setCalories(100);
+cocaCola.setSodium(35);
+cocaCola.setCarbohydrate(27);
+```
+  `단점` : 객체하나를 만들기 위해서 메서드를 여러개 호출해야함 -> 위 처럼 5개 메서드 호출   
+  [`-> 일관성이 깨지며 클래스를 불변으로 만들 수 없고 스레드 안정성을 얻기 힘들다.`](##-아이템17.-변경가능성을-최소화하라)
+
+  객체가 완전히 생성되기 전까지 `일관성(consistency`이 무너진 상태에 놓이게 된다.  
+  생성자가 매개변수없는 생성자니까! 매개변수의 유효성을 확인할수있는 방법이 생성시에는 없음  
+  점층적 생성자 패턴에서는 *매개변수 유효성* 을 생성자에서 확인하면 일관성 유지가 가능했었다.  
+
+  `단점 극복 방법` : 생성이 끝난 객체를 수동으로 *얼리고(freezing)* 얼리기 전에는 사용할수 없도록 한다.  
+  하지만... `freeze` 메서드를 확실히 호출했는지 컴파일러가 보증할 방법이 없어 런타임 오류에 취약함
+
+### `3. 빌더 패턴(Builder pattern)`   
+점층적 생성자 패턴의 안정성과 자바빈즈 패턴의 가독성 겸비  
+``` java
+public class NutritionFacts {
+    private final int servingSize;  // ml  
+    private final int servings;     // 회  
+    private final int calories;     // 칼로리
+    private final int fat;          // g    
+    private final int sodium;       // mg  
+    private final int carbohydrate; // g    
+
+    public static class Builder {
+        // 필수 매개변수
+        private final int servingSize; 
+        private final int servings;
+
+        // 선택 매개변수
+        private final int calories      = 0; // 칼로리
+        private final int fat           = 0; // g    
+        private final int sodium        = 0; // mg  
+        private final int carbohydrate  = 0; // g    
+
+        public Builder(int servingSize, int servings){
+            this.servingSize = servingSize;
+            this.servings = servings;
+        }
+
+        public Builder calories(int val){
+            calories = val;
+            return this; // Builder 자신 반환
+        }
+        public Builder fat(int val){
+            fat = val;
+            return this; // Builder 자신 반환
+        }
+        public Builder sodium(int val){
+            sodium = val;
+            return this; // Builder 자신 반환
+        }
+        public Builder carbohydrate(int val){
+            carbohydrate = val;
+            return this; // Builder 자신 반환
+        }
+        
+        public NutritionFacts build(){
+            return new NutritionFacts(this); // NutritionFacts 생성자에 Builder 전달
+        }
+    }
+
+    private NutritionFacts(Builder builder){
+        servingSize = builder.servingSize;
+        servings = builder.servings;
+        calories = builder.calories;
+        fat = builder.fat;
+        sodium = builder.sodium;
+        carbohydrate = builder.carbohydrate;
+    }
+}
+
+```
+NutritionFacts 클래스는 불변이며, 모든 매개변수의 기본값들을 한곳에 모아뒀다.  
+`빌더의 세터 메서드`들은 `빌더 자신을 반환`하기 때문에 **연쇄적으로 호출**이 가능하다.  
+-> *플루언트API(flient API) 또는 메서드 연쇄(method chaining)*  
+-> 명명된 선택적 매개변수(named optional parameters) 흉내 낸 것 
+``` java
+NutritionFacts cocaCola = new NutritionFacts.Builder(240, 8) //필수 매개변수 세팅
+                        .calories(100).sodium(35).carbohydrate(27) //선택 매개변수 세팅
+                        .build(); // builer에 세팅된 매개변수로 NutritionFacts 객체 생성
+```
+필요한 객체를 직접 만드는 대신,   
+필수 매개변수만으로 `생성자(혹은 정적 팩터리 메서드)`를 호출해 빌더 객체를 얻는다.  
+빌더 객체가 제공하는 일종의 `세터메서드`로 원하는 선택 매개변수들을 설정한다.  
+매개변수가 없는 `build 메서드`를 호출해 (보통 불변인) **객체**를 얻는다.
+
+> 유효성 검사
+
+잘못된 매개변수를 최대한 일찍 발견하려면 
+* `빌더의 생성자`와 `메서드`에서 입력 매개변수를 검사하고, 
+* `build 메서드가 호출하는 생성자`에서 여러 매개변수에 걸친 불변식(invariant)을 검사하자.
+  
+
+불변식을 보장하려면  
+* [빌더로부터 매개변수를 복사한 후 해당 객체 필드들도 검사해야한다.](##-아이템50.-적시에-방어적-복사본을-만들라)
+->  검사 후 잘못된 점을 발견하면 어떤 매개변수가 잘못되었는지 자세히 알려주는 메세지를 담아 `IllegalArgumentException`을 던지면 된다.
+
+*불변(immutable)* 이란?  
+어떠한 변경도 허용하지 않는다는 뜻
+변경을 허용하는 가변(mutable) 객체와 구분하는 용도  
+ex. String 객체
+
+ *불변식(invariant)* 이란?  
+ 프로그램이 실행되는 동안, 혹은 정해진 기간 동안 반드시 만족해야하는 조건  
+ 변경을 허용할수는 있으나 주어진 조건 내에서만 허용한다는것  
+ ex. 리스트의 크기는 반드시 0이상 : 음수값이 된다면 불변식이 깨진것
+
+  -> 가변 객체에도 불변식은 존재할수있음. 
+
+
+> 계층적으로 설계된 클래스와 함께 쓰이기 좋다.
+``` java
+// 피자의 다양한 종류를 표현하는 계층구조의 루트에 놓인 "추상 클래스"
+// 추상 클래스는 추상 빌더
+public abstract class Pizza {
+    public enum Topping { HAM, MUSHROOM, ONION, PEPPER, SAUSAGE }
+    final Set<Topping> toppings;
+
+    abstract static class Builder<T extends Builder<T>> {
+        // 비어있는 Topping 클래스에 대한 EnumSet 생성
+        EnumSet<Topping> toppings = EnumSet.noneOf(Topping.class);
+
+        public T addTopping(Topping topping){
+            toppings.add(Objects.requireNonNull(topping)); // toppings이 null이라면 바로 NPE 발생 
+            // addTopping 메서드를 쓸때 topping은 무조건 null아니면 안된다.
+            
+            return self(); 
+            // 공통된 메서드를 사용할때 각 하위타입에 맞춰서 리턴을 시켜야하는데 
+            // 그때 self메서드를 하위타입이 스스로 자신의 타입에 맞게 리턴시키도록 self메서드를 재정의 시키게한다.
+        } 
+
+        abstract Pizza bulid();
+
+        // 하위 클래스는 이 메서드를 재정의(overriding)하여 "this" 반환해야함.
+        protected abstract T self();
+    }
+
+    Pizza(Builder<?> builder){
+        toppings = builder.toppings.clone(); //아이템50 참조
+    }
+
+}
+
+```  
+
+`Pizza.Builder 클래스`는 [재귀적 타입 한정](##-아이템30.-이왕이면-제네릭-메서드로-만들라)을 이용하는 제네릭 타입이다.
+
+여기에 `추상메서드인 self()`를 더해 하위클래스에서는 형변환하지 않고도 메서드 연쇄를 지원할수있다.  
+-> self 타입이 없는 자바를 위한 우회 방법 `시뮬레이트한 셀프타입 관용구(simulated self-type)`
+
+> Pizza 하위 클래스 : 뉴욕피자
+``` java
+public class NyPizza extends Pizza {
+    public enum Size {SMALL, MEDIUM, LARGE};
+    private final Size size;
+
+    public static class Builder extends Pizza.Builder<Builder> {
+        private final Size size; //사이즈는 필수
+
+        public Builder(Size size){ // 생성자
+            this.size = Object.requireNonNull(size); //size가 없으면 NPE
+        }
+
+        // 구현체 클래스를 반환하도록 선언
+        // 하위 클래스의 메서드(build())가 상의 클래스의 메서드가 정의 한 반환 타입(Pizza) 이 아닌, 
+        // 그 하위 타입(NyPizza)을 반환 : 공변환 타이핑 (convariant return typing) 
+        @Override
+        public NyPizza build(){
+            return new NyPizza(this); // this는 Builder
+        }
+
+        @Override
+        protected Builder self(){
+            return this; // this 는 Builder
+        }
+    }
+
+    private NyPizza(Builder builder){
+        super(builder);
+        size = builder.size;
+    }
+}
+
+```
+> Pizza 하위 클래스 : 칼초네피자
+``` java
+public class Calzone extends Pizza {
+    private final boolean sauceInside;
+
+    public static class Builder extends Pizza.Builder<Builder> {
+        private boolean sauceInside = false; //기본값 //선택
+
+        // 생성자 없음
+        
+        public Builder sauceInside(){
+           sauceInside = true;
+           return this;
+        }
+
+        // 구현체 클래스를 반환하도록 선언
+        // 하위 클래스의 메서드(build())가 상의 클래스의 메서드가 정의 한 반환 타입(Pizza) 이 아닌, 
+        // 그 하위 타입(Calzone)을 반환 : 공변환 타이핑 (convariant return typing) 
+        @Override
+        public Calzone build(){
+            return new Calzone(this); // this는 Builder
+        }
+
+        @Override
+        protected Builder self(){
+            return this; // this 는 Builder
+        }
+    }
+
+    private Calzone(Builder builder){
+        super(builder);
+        sauceInside = builder.sauceInside;
+    }
+}
+
+
+```
+`객체 생성 코드`
+``` java
+// SMALL사이즈의 햄,양파 뉴욕피자
+NyPizza nyPizza = new NyPizza.Builder(SMALL).addTopping(ONION).addTopping(HAM).build();
+
+// 소스가 들어간 햄 깔조네피자
+Calzone calzone = new Calzone.Builder().addTopping(HAM).sauceInside().build();
+```
+위와 같이 빌더를 이용하면 가변인수(varargs) 매개변수를 여러개 사용할 수 있다. 각각을 적절한 메서드로 나눠 선언하면 된다.
+
+`addToping()` : 매서드를 여러번 호출하도록 하고 각 호출때 넘겨진 매개변수들을 하나의 필드로 모음.
+
+* 장점
+  1.  빌더하나로 여러객체를 순회하면서 만들수 있다.
+  2.  빌더에 넘기는 매개변수에 따라 다른 객체를 만들수도 있다.
+  3.  객체마다 부여되는 일련번호와 같은 특정 필드는 빌더가 알아서 채우도록 할수도있다.
+* 단점  
+  1. 객체를 만드려면 빌더부터 만들어야한다. 성능에 민감할때는 문제가 될수도있다.
+  2. 점층적 생성자 패턴보다는 코드가 장황해서 매개변수가 4개 이상은 되어야 값어치를 한다.   
+   but, API는 시간이 지날수록 매개변수 늘어남.  
+
+
+💥 정리  
+생성자나 정적 팩터리가 처리해야 할 *매개변수가 많다면*  빌더 패턴을 선택하는것이 더 낫다!  
+매개변수 중 다수가 필수가 아니거나.. 같은 타입이면 특히 더!  
+점층적 생성자 보다는 클라이언트 코드를 읽고 쓰기가 훨씬 간결  
+자바빈즈보다 훨씬 안전
+
+
+### 참고 
+``` java
+----------------------------------------------------------------------------
+EnumSet
+----------------------------------------------------------------------------
+1. EnumSet.noneOf
+EnumSet<Topping> toppings = EnumSet.noneOf(Topping.class);
+return toppings : []
+
+1. EnumSet.allOf
+EnumSet<Topping> toppings = EnumSet.allOf(Topping.class);
+return toppings : [HAM, MUSHROOM, ONION, PEPPER, SAUSAGE]
+----------------------------------------------------------------------------
+
+----------------------------------------------------------------------------
+Objects.requireNonNull : 명시성, 빠른 실패
+----------------------------------------------------------------------------
+public static <T> T requireNonNull(T obj) { //null이면 바로 NPE
+        if (obj == null)
+            throw new NullPointerException();
+        return obj;
+}
+
+1. 명시성(explicity)
+public class A {
+    String name;
+}
+
+public class B {
+    A a;
+
+    public B(A a){
+        this.a = Objects.requireNonNull(a); // a가 null이면 바로 NPE 터짐.
+        // -> A 객체가 절대 null이면 안된다는것을 명시하는것임.
+    }
+
+}
+
+2. 빠른 실패 (fail-fast) : 장애가 발생한 시점에서 즉시 파악할수 있음
+A a = null;
+B b = new B(a); // B 생성시점에 바로 NPE 발생
+
+// 사용하지않는다면 생성시점까지는 오류발생하지않지만 setter 메서드에서 NPE
+b.getA(); // NPE 발생
+
+// java 9 
+* Optional 과 비슷하게 사용가능 (null일수도 있고, 아닐수도 있는..)
+requireNonNullElseGet(T obj, Supplier<? extends T> supplier); 
+```
+
+
