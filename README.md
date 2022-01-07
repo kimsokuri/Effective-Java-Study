@@ -1176,8 +1176,59 @@ public final class String implements java.io.Serializable, Comparable<String>, C
 }
 ``` 
 
+## `Static` 
+메모리에 한번 할당 되어 프로그램이 종료될때 해제되는것
 
+일반적으로 만드는 `class`는 `static 영역`에 생성, `new 연산`을 통해 생성한 객체는 `Heap 영역`에 생성된다.
+ * `Heap 영역`의 메모리는 가비지 컬렉터(**Garbege Collector**) 를 통해 수시로 관리 받는다.
 
+1. `Static 영역` 
+   * 일반적으로 생성하는 class
+   * 모든 객체가 공유하는 메모리 
+   * 메모리가 계속 할당되므로 퍼포먼스 영향
+2. `Heap 영역`
+   * new 연산으로 생성 
+   * 가비지 컬렉터(**Garbege Collector**) 를 통해 수시로 관리 받는다.
+
+### `Static 변수`  : 클래스 변수이다. 객체를 생성하지 않고 접근이 가능하다.
+``` java
+public class MyCalculator {
+    public static String appName = "MyCalculator";
+
+    public static int add(int x, int y){
+        return x + y;
+    }
+    
+    public int min(int x, int y){
+        return x - y;
+    }
+}
+
+// static 메소드이기때문에 객체 생성전에도 호출이 가능함 
+MyCalculator.add(4,6); // O
+// non-static 메소드이기 때문에 객체 생성 전에는 메서드가 정의되어 있지 않기때문에 호출이 불가능함 
+MyCalculator.min(4,2); // X
+
+MyCalculator cal = new MyCalculator();
+// 가능은 하지만, 이렇게 쓰는건은 static 메소드로 만든 의미가 없음. 권장하지 않음
+cal.add(4,6); // O 
+cal.min(4,2); // O
+``` 
+
+``` java
+public class Person {
+    private String name = "SH";
+
+    public void printName(){
+        sysout("이름은: "+ this.name);
+    }    
+}
+```
+Person 클래스를 100번 new를 통해 생성을 하게 되면, 
+"SH"라는 값을 가지는 name이 메모리에 100개가 쌓이게 된다.  
+-> 이런 경우에는 `static`을 통해 여러 객체가 하나의 *name*을 참조하게 한다!  
+-> `static`값은 보통 `상수`의 값을 갖는 경우가 많아서 `public`으로 선언하고, 또한 변경되지않는 부분이 대다수라 `final`을 함께 사용한다.  
+-> *public static final*
 
 ## 아이템 6. 불필요한 객체 생성을 피하라
 ## 아이템 7. 다 쓴 객체 참조를 해제하라
